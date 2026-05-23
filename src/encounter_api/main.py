@@ -1,12 +1,13 @@
 """Application factory and ASGI entrypoint."""
 
+import logging
 from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from encounter_api.config import get_settings
+from encounter_api.config import DEFAULT_JWT_SECRET, get_settings
 from encounter_api.errors import register_exception_handlers
 from encounter_api.logging_config import configure_logging
 from encounter_api.repository import InMemoryAuditRepository, InMemoryEncounterRepository
@@ -32,6 +33,11 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    if settings.jwt_secret == DEFAULT_JWT_SECRET:
+        logging.getLogger(__name__).warning(
+            "using the built-in development JWT secret; "
+            "set ENCOUNTER_API_JWT_SECRET before any shared deployment"
+        )
 
     app = FastAPI(
         title="Patient Encounter API",

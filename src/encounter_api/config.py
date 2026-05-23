@@ -10,6 +10,8 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEFAULT_JWT_SECRET = "local-development-secret-not-for-production"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -18,7 +20,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    jwt_secret: str = "local-development-secret-not-for-production"
+    jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_issuer: str = "encounter-api"
     log_level: str = "INFO"
