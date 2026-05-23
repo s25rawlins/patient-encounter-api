@@ -7,8 +7,13 @@ satisfy the same Protocols and drop in without changing business logic.
 Filtering is expressed as query value objects and pushed down to the store on
 purpose. The in-memory version filters in Python, but the same shape maps
 directly onto a SQL ``WHERE`` clause once a real database is behind it.
+
+Each store guards its state with a lock, because FastAPI runs the sync route
+handlers in a threadpool. Without it, concurrent requests could interleave reads
+and writes, and a scan could observe a mutation mid-iteration.
 """
 
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -47,15 +52,19 @@ class AuditRepository(Protocol):
 class InMemoryEncounterRepository:
     def __init__(self) -> None:
         self._encounters: dict[UUID, Encounter] = {}
+        self._lock = threading.Lock()
 
     def add(self, encounter: Encounter) -> None:
-        self._encounters[encounter.encounter_id] = encounter
+        with self._lock:
+            self._encounters[encounter.encounter_id] = encounter
 
     def get(self, encounter_id: UUID) -> Encounter | None:
-        return self._encounters.get(encounter_id)
+        with self._lock:
+            return self._encounters.get(encounter_id)
 
     def find(self, query: EncounterQuery) -> list[Encounter]:
-        matches = [e for e in self._encounters.values() if _encounter_matches(e, query)]
+        with self._lock:
+            matches = [e for e in self._encounters.values() if _encounter_matches(e, query)]
         matches.sort(key=lambda e: e.encounter_date)
         return matches
 
@@ -63,12 +72,15 @@ class InMemoryEncounterRepository:
 class InMemoryAuditRepository:
     def __init__(self) -> None:
         self._entries: list[AuditEntry] = []
+        self._lock = threading.Lock()
 
     def record(self, entry: AuditEntry) -> None:
-        self._entries.append(entry)
+        with self._lock:
+            self._entries.append(entry)
 
     def find(self, query: AuditQuery) -> list[AuditEntry]:
-        matches = [a for a in self._entries if _audit_matches(a, query)]
+        with self._lock:
+            matches = [a for a in self._entries if _audit_matches(a, query)]
         matches.sort(key=lambda a: a.occurred_at)
         return matches
 
