@@ -3,10 +3,11 @@
 Two layers work together:
 
 1. Convention. Callers log safe identifiers (request id, encounter id, actor),
-   never patient data.
+   never patient data, and never interpolate PHI into a message string. The
+   filter screens structured fields, not free-form message text.
 2. Backstop. ``PHIRedactionFilter`` blanks any field whose name is a known PHI
-   marker before the record is formatted, so a careless log call still cannot
-   leak. People forget and code changes, so the net stays on.
+   marker, at any nesting depth, before the record is formatted. So PHI passed
+   as structured context cannot leak even if a log call is careless.
 
 Records are emitted as line-delimited JSON, which is what log shippers expect
 and what makes request-id correlation across services practical.
@@ -39,6 +40,8 @@ PHI_FIELD_NAMES = frozenset(
         "email",
         "phone",
         "address",
+        "clinical_data",
+        "clinicaldata",
     }
 )
 
@@ -54,19 +57,32 @@ _STANDARD_ATTRS = frozenset(
 )
 
 
+def _redact(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            key: (REDACTED if str(key).lower() in PHI_FIELD_NAMES else _redact(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact(item) for item in value]
+    return value
+
+
 class PHIRedactionFilter(logging.Filter):
     """Redacts PHI-named fields from log records before they are emitted."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        for key, value in record.__dict__.items():
+        for key in list(record.__dict__):
             if key in _STANDARD_ATTRS:
                 continue
             if key.lower() in PHI_FIELD_NAMES:
                 record.__dict__[key] = REDACTED
+            else:
+                record.__dict__[key] = _redact(record.__dict__[key])
 
         if isinstance(record.args, Mapping):
             record.args = {
-                key: (REDACTED if str(key).lower() in PHI_FIELD_NAMES else value)
+                key: (REDACTED if str(key).lower() in PHI_FIELD_NAMES else _redact(value))
                 for key, value in record.args.items()
             }
         return True

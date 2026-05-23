@@ -6,6 +6,7 @@ that blows up mid-flight leaks nothing into the response or the logs.
 
 import io
 import logging
+from typing import Any
 
 from fastapi.testclient import TestClient
 
@@ -28,11 +29,20 @@ def test_filter_redacts_phi_named_fields() -> None:
 
     logger.info(
         "persisting encounter",
-        extra={"patient_id": "patient-2847", "encounter_id": "enc-1", "request_id": "req-9"},
+        extra={
+            "patient_id": "patient-2847",
+            "clinical_data": "diagnosis: major depressive disorder",
+            "context": {"patient_name": "Jane Doe"},
+            "encounter_id": "enc-1",
+            "request_id": "req-9",
+        },
     )
 
     output = stream.getvalue()
+    # PHI by field name, the largest PHI field, and PHI nested under a safe key.
     assert "patient-2847" not in output
+    assert "major depressive disorder" not in output
+    assert "Jane Doe" not in output
     assert "[REDACTED]" in output
     # Safe correlation identifiers are kept so the log stays useful.
     assert "enc-1" in output
@@ -44,7 +54,7 @@ class _FailingService:
         raise RuntimeError("backing store unavailable")
 
 
-def test_error_path_leaks_no_phi(valid_encounter: dict) -> None:
+def test_error_path_leaks_no_phi(valid_encounter: dict[str, Any]) -> None:
     app = create_app()
     app.dependency_overrides[get_encounter_service] = _FailingService
     client = TestClient(app, raise_server_exceptions=False)
