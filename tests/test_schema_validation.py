@@ -4,6 +4,8 @@ The error names which fields failed, but it does not echo submitted values
 (which could be PHI) and does not surface validation-library internals.
 """
 
+from typing import Any
+
 from fastapi.testclient import TestClient
 
 
@@ -35,7 +37,7 @@ def test_malformed_payload_returns_structured_400(
 def test_unknown_fields_are_rejected(
     client: TestClient,
     auth_headers: dict[str, str],
-    valid_encounter: dict,
+    valid_encounter: dict[str, Any],
 ) -> None:
     payload = valid_encounter | {"ssn": "123-45-6789"}
     response = client.post("/encounters", json=payload, headers=auth_headers)

@@ -4,6 +4,8 @@
 gets an isolated application with no shared state and no teardown to remember.
 """
 
+from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -22,7 +24,7 @@ def auth_headers() -> dict[str, str]:
 
 
 @pytest.fixture
-def valid_encounter() -> dict:
+def valid_encounter() -> dict[str, Any]:
     return {
         "patientId": "patient-2847",
         "providerId": "dr-okafor",
