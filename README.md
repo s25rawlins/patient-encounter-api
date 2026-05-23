@@ -85,6 +85,14 @@ one would satisfy the same interface and drop in without touching routes or
 services. That boundary is also what makes the service unit-testable against a
 fake store, with no web server in the loop.
 
+### In-memory storage and its limits
+
+Both stores are plain in-process collections guarded by a lock, because FastAPI
+runs the sync handlers in a threadpool and concurrent requests would otherwise
+interleave. They are unbounded and non-durable on purpose. The repository
+interface is the seam where a real database takes over, and the production notes
+cover persistence, retention, and partitioning.
+
 ### Validation at the boundary
 
 Every request body is a Pydantic v2 model. The API speaks camelCase on the wire
@@ -107,9 +115,13 @@ correlation, with no stack trace sent to the client.
 Two layers keep patient data out of the logs:
 
 1. **Convention.** Application code logs safe identifiers (request id, encounter
-   id, actor), never patient fields.
+   id, actor), never patient fields, and never interpolates PHI into a message
+   string.
 2. **Backstop.** A `logging.Filter` blanks any field whose name is a known PHI
-   marker before the record is formatted. Even a careless log call cannot leak.
+   marker, at any nesting depth, before the record is formatted, so PHI passed as
+   structured context is scrubbed even when a log call is careless. The filter
+   screens fields, not free-form message text, which is why the convention above
+   pairs with it.
 
 Logs are emitted as line-delimited JSON, which keeps `request_id` correlation
 practical once these run across more than one process.
@@ -214,7 +226,8 @@ Swap the HS256 mock for asymmetric tokens (ES384) issued by a real identity
 provider and verified against a rotating JWKS endpoint, which fits SMART on FHIR
 Backend Services for EMR integration. Add role-based access control so a clinician,
 a billing user, and a compliance auditor see different slices, and record the
-caller's role on each audit entry.
+caller's role on each audit entry. Verify the audience (`aud`) claim too, so a
+token minted for another service that shares the key is not accepted here.
 
 ### Observability
 
@@ -232,7 +245,10 @@ The service is stateless once storage moves out of process, so it scales
 horizontally behind a load balancer. The audit table grows without bound, so
 partition it by time (monthly) and archive cold partitions to the WORM tier.
 Add rate limiting at the edge and idempotency keys on `POST /encounters` so a
-retried create does not produce duplicate records.
+retried create does not produce duplicate records. Cap request body size at the
+proxy and bound `clinicalData`, since an unbounded JSON blob is a
+memory-exhaustion vector. The request-id middleware uses Starlette's
+`BaseHTTPMiddleware`; a pure-ASGI middleware trims per-request overhead at scale.
 
 ## Time Breakdown
 
