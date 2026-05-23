@@ -18,6 +18,7 @@ from encounter_api.models import (
     EncounterMetadata,
 )
 from encounter_api.repository import (
+    AuditQuery,
     AuditRepository,
     EncounterQuery,
     EncounterRepository,
@@ -82,3 +83,13 @@ class EncounterService:
                 occurred_at=when,
             )
         )
+
+
+class AuditService:
+    """Read side of the audit trail, used by the compliance endpoint."""
+
+    def __init__(self, audit: AuditRepository) -> None:
+        self._audit = audit
+
+    def list_entries(self, query: AuditQuery) -> list[AuditEntry]:
+        return self._audit.find(query)

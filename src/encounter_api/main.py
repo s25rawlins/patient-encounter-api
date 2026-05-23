@@ -10,8 +10,8 @@ from encounter_api.config import get_settings
 from encounter_api.errors import register_exception_handlers
 from encounter_api.logging_config import configure_logging
 from encounter_api.repository import InMemoryAuditRepository, InMemoryEncounterRepository
-from encounter_api.routes import encounters
-from encounter_api.service import EncounterService
+from encounter_api.routes import audit, encounters
+from encounter_api.service import AuditService, EncounterService
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -44,10 +44,12 @@ def create_app() -> FastAPI:
     app.state.encounter_repository = encounter_repository
     app.state.audit_repository = audit_repository
     app.state.encounter_service = EncounterService(encounter_repository, audit_repository)
+    app.state.audit_service = AuditService(audit_repository)
 
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     app.include_router(encounters.router)
+    app.include_router(audit.router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
