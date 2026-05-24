@@ -189,7 +189,7 @@ a coverage number.
 
 ## Production Considerations
 
-What changes when this moves from a take-home-sized service to something handling
+What changes when this moves from an in-memory demo to something handling
 real PHI at scale.
 
 ### Storage
