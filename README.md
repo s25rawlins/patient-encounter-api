@@ -192,16 +192,19 @@ a coverage number.
 What changes when this moves from a take-home-sized service to something handling
 real PHI at scale.
 
-### Storage and tenant isolation
+### Storage
 
-Replace the in-memory repositories with Postgres behind the same interface. For
-multi-tenant PHI, enable `FORCE ROW LEVEL SECURITY` on every tenant-scoped table
-and set the tenant context per connection, so the database itself returns only
-rows the current session may see. A misconfigured query then cannot leak across
-tenants, because isolation lives at the storage layer rather than in application
-code. Index the encounter table on `(patient_id, encounter_date)` for the common
-filters, run reads through a pooled connection (PgBouncer in transaction mode),
-and move list endpoints to keyset pagination so result sets stay bounded.
+Replace the in-memory repositories with Postgres behind the same interface. Index
+for the real query paths (`(patient_id, encounter_date)` and
+`(provider_id, encounter_date)` for encounters, `(encounter_id, occurred_at)` for
+audit), run reads through a connection pooler, and move list endpoints to keyset
+pagination with a unique tiebreaker so result sets stay bounded.
+
+A service like this typically serves many practices, so production PHI is
+multi-tenant. Row-level security (`FORCE ROW LEVEL SECURITY`) then enforces
+isolation at the storage layer. With a transaction pooler the tenant must be set
+per transaction (`SET LOCAL`), not per session, or a reused connection can carry
+one tenant's context into another's request.
 
 ### Encryption
 
